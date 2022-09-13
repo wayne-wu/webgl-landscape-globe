@@ -13,8 +13,8 @@ Practice using raymarching, SDFs, and toolbox functions to sculpt a *beautiful* 
 ## Add basic scene elements
 
 Using what you've learned about toolbox functions and sdfs:
-* Create a noise-based terrain with height-based coloration that suggests at least 3 distinct terrain features (for example, the lowest portions of your terrain can be water and the highest, white-colored icecaps.). 
-    * You must use at least 3 different toolbox functions, such as bias/gain or a wave function.
+* Create a noise-based terrain with height-based coloration that suggests at least 3 distinct terrain features (for example, the lowest portions of your terrain can be water and the highest, white-colored icecaps.). Feel free to get creative and do a non-realistic or stylized scene.
+    * You must use at least 3 different toolbox functions, such as bias/gain or a wave function. At this point we expect you to be comfy using such functions to modify shape.
 * Create a backdrop / sky where there is no terrain. For example, an interesting gradient with some kind of noise.
 
 ## Lighting
@@ -31,11 +31,11 @@ Suggestions:
 
 ## (Optional) Extra Credit
 
-* Additional scene elements eg. a building or animal or trees. 
-   * Sculpting with sdfs can be fiddly, so trying to model something very precise may be frustrating
+* Additional scene elements eg. a building or animal or trees. [easy-hard, depends]
+   * Sculpting with sdfs can be fiddly, so trying to model something very precise may be frustrating. We suggest keeping it simple
    * If your models get heavy you may also need to add acceleration structures *bonus points!
-* Add 3d translucent clouds to your sky.
-* Add camera animation to create a fly-over effect 
+* Add 3d translucent clouds to your sky. [hard, it will be fiddly and slow your program down A LOT]
+* Add camera animation to create a fly-over effect [???]
    * Depending on how you set up your scene, this may be a pretty involved change because the terrain will have to look good EVERYWHERE not just at a fixed angle. #proceduralLessons).
 
 ## Submission
