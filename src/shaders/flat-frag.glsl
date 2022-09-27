@@ -7,43 +7,224 @@ uniform float u_Time;
 
 const float STEPSIZE = 0.01;
 const int MAXSTEPS = 1000;
+const float EPS = 0.001;
+const vec3 keylight = vec3(0, 5, 0);
+const vec3 backlight = vec3(0, 3, -5);
+const vec3 filllight = vec3(5, -5, 0);
 
 in vec2 fs_Pos;
 in vec4 fs_LightVec;  
 out vec4 out_Col;
 
-const vec3 lightPos = vec3(5, 5, 3);
+
+float ease_in_quadratic(float t) 
+{
+    return t * t;
+}
+
+float bias(float b, float t) 
+{
+    return pow(t, log(b) / log(0.5));
+}
+
+float gain(float g, float t) 
+{
+    if (t < 0.5)
+        return bias(1.0-g, 2.0*t)/2.0;
+    else
+        return 1.0 - bias(1.0-g, 2.0 - 2.0*t)/2.0;
+}
+
+float impulse(float k, float x)
+{
+    float h = k*x;
+    return h * exp(1.0-h);
+}
+
+float map(float value, float min1, float max1, float min2, float max2) {
+  return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
+}
+
+// Hash functions are taken from IQ's shadertoy examples
+float hash (in vec2 st) {
+    return fract(sin(dot(st.xy,
+                  vec2(12.9898,78.233)))
+                 * 43758.5453123);
+}
+
+vec3 hash3( vec3 p )
+{
+	p = vec3( dot(p,vec3(127.1,311.7, 74.7)),
+			  dot(p,vec3(269.5,183.3,246.1)),
+			  dot(p,vec3(113.5,271.9,124.6)));
+
+	return -1.0 + 2.0*fract(sin(p)*43758.5453123);
+}
+
+float trilinear(float a, float b, float c, float d, 
+                float e, float f, float g, float h, vec3 u)
+{
+    return mix(mix(mix(a, b, u.x), mix(c, d, u.x), u.y), 
+                mix(mix(e, f, u.x), mix(g, h, u.x), u.y), u.z);
+}
+
+float bilinear(float a, float b, float c, float d, vec2 u)
+{
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+vec2 cubic(vec2 t)
+{
+    return t*t*(3.0-2.0*t);
+}
+
+vec2 quintic(vec2 t)
+{
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+
+// float grad(vec3 2, vec3 2, vec2 inc)
+// {
+//     return dot(hash3(i + inc), f - inc);
+// }
+
+float noise( in vec2 x )
+{
+    vec2 i = floor(x);
+    vec2 u = fract(x);
+    u = quintic(u);
+
+    float a = hash(i + vec2(0,0));
+    float b = hash(i + vec2(1,0));
+    float c = hash(i + vec2(0,1));
+    float d = hash(i + vec2(1,1));
+
+    return bilinear(a, b, c, d, u);
+}
+
+float fbm(in vec2 pos)
+{
+    float total = 0.f;
+    float amplitudeSum = 0.f;
+
+    for (int i = 0; i < 6; i++)
+    {
+        float frequency = pow(2.0f, float(i));
+        float amplitude = pow(0.5f, float(i));
+        
+        amplitudeSum += amplitude;
+
+        total += amplitude*noise(frequency*pos*1.0);
+    }
+
+    return total/amplitudeSum;
+}
+
+
+float sdBox(vec3 p, vec3 b)
+{
+    vec3 d = abs(p) - b;
+    return min(max(d.x, max(d.y, d.z)), 0.0) + length(max(d, 0.0));
+}
+
+float sdBBox(vec3 p)
+{
+    return sdBox(p, vec3(2.0, 2.0, 2.0));
+}
 
 float sdSphere( vec3 p, float s )
 {
   return length(p)-s;
 }
 
-vec3 lambertShade( vec3 pos, vec3 normal, vec3 diffuse )
+float sdHeight( in vec3 p )
 {
+  float h = fbm(0.5*p.xz);
+  h = map(h, 0.0, 1.0, -1.0, 1.0);
+  return p.y - h;
+}
+
+vec3 shadeLambert( vec3 pos, vec3 normal, vec3 diffuse )
+{
+  vec3 n = normalize(normal);
   // Calculate the diffuse term for Lambert shading
-  float diffuseTerm = dot(normalize(normal), normalize(lightPos - pos));
+  float d1 = dot(n, normalize(keylight - pos));
+  float d2 = dot(n, normalize(filllight - pos));
+  float d3 = dot(n, normalize(backlight - pos));
   // Avoid negative lighting values
   // diffuseTerm = clamp(diffuseTerm, 0, 1);
 
   float ambientTerm = 0.2;
 
-  float lightIntensity = diffuseTerm + ambientTerm;   //Add a small float value to the color multiplier
-                                                      //to simulate ambient lighting. This ensures that faces that are not
-                                                      //lit by our point light are not completely black.
-  // Compute final shaded color
+  float lightIntensity = d1 + d2 + d3 + ambientTerm;
+
   return diffuse * lightIntensity;
 }
 
+vec3 heightColor( float h )
+{
+  vec3 color = vec3(0.0);
+  if (h < -0.5)
+    color = vec3(0.46, 0.38, 0.33);
+  else if (h > -0.5 && h < 0.5)
+    color = vec3(0.44, 0.47, 0.27);
+  else
+    color = vec3(0.94, 0.95, 0.93);
+
+  return color;
+}
+
+bool hitBSphere( inout vec3 p, in vec3 dir)
+{
+  for (int i = 0; i < 50; i++)
+  {
+    float d = sdSphere(p, 1.5);
+    if (d < EPS)
+      return true;
+    p += dir * d;
+  }
+}
+
+bool hitTerrain( inout vec3 p, in vec3 dir, inout vec3 color )
+{
+  for (int i = 0; i < MAXSTEPS; i++)
+  {
+      // When we hit very close to the surface
+      float d = sdHeight(p);
+      if (d < EPS)
+      {
+          // Calculate normal
+          vec3 dx = vec3(EPS, 0, 0);
+          vec3 dz = vec3(0, 0, EPS);
+          vec3 n = vec3(sdHeight(p - dx) - sdHeight(p - dx), 
+                        2.0*EPS,
+                        sdHeight(p - dz) - sdHeight(p + dz));
+          n = normalize(n);
+
+          color += shadeLambert(p, n, heightColor(p.y));
+          return true;
+      }
+
+      // Checks if the ray hits the bounding box from the inside
+      if (sdBBox(p) >= EPS)
+      {
+          color += vec3(0.47, 0.66, 0.82);
+          return false;
+      }
+
+      p += dir * STEPSIZE;
+  }
+  return true;
+}
 
 void main() {
 
   vec3 eye = u_Eye;
-  vec3 forward = u_Ref - u_Eye;
+  vec3 forward = normalize(u_Ref - u_Eye);
   vec3 up = u_Up;
   vec3 right = normalize(cross(forward,up));
 
-  float f = 0.05 * distance(u_Eye, u_Ref);
+  float f = 0.5 * distance(u_Eye, u_Ref);
   float u = gl_FragCoord.x * 2.0 / u_Dimensions.x - 1.0;
   float v = gl_FragCoord.y * 2.0 / u_Dimensions.y - 1.0;
 
@@ -60,16 +241,27 @@ void main() {
 
   vec3 col = vec3(0.0);
 
-  do {
-    d = sdSphere(pos, 1.0);
-    if (d < 0.01)
+  if (hitBSphere(pos, dir))
+  {
+    if(sdHeight(pos) < EPS)
+      col = shadeLambert(pos, normalize(pos), heightColor(pos.y));
+    else
     {
-      col = lambertShade(pos, pos, vec3(1.0));
-      break;
+      dir = refract(dir, normalize(pos), 1.0/1.3);
+      hitTerrain(pos, dir, col);
     }
-    pos += d*dir;
-    ++itr;
-  } while(itr < MAXSTEPS);
+  }
+
+  // do {
+  //   d = sdSphere(pos, 1.0);
+  //   if (d < EPS)
+  //   {
+  //     col = shadeLambert(pos, pos, vec3(1.0));
+  //     break;
+  //   }
+  //   pos += d*dir;
+  //   ++itr;
+  // } while(itr < MAXSTEPS);
 
   // vec4 surfaceColor = vec4(0.0);
   // vec4 boxColor = vec4(0.0);

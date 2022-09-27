@@ -61,7 +61,7 @@ function main() {
   // Initial call to load scene
   loadScene();
 
-  const camera = new Camera(vec3.fromValues(0, 0, -10), vec3.fromValues(0, 0, 0));
+  const camera = new Camera(vec3.fromValues(10, 10, -10), vec3.fromValues(0, 0, 0));
 
   const renderer = new OpenGLRenderer(canvas);
   renderer.setClearColor(164.0 / 255.0, 233.0 / 255.0, 1.0, 1);
@@ -88,6 +88,7 @@ function main() {
     // pass camera information to buffer
     flat.setEyeRefUp(camera.controls.eye, camera.controls.center, camera.controls.up);
     flat.setDimensions(window.innerWidth, window.innerHeight);
+    flat.setTime(time);
 
     renderer.render(camera, flat, [
       square,
