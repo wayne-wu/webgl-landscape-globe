@@ -8,9 +8,16 @@ uniform float u_Time;
 const float STEPSIZE = 0.01;
 const int MAXSTEPS = 1000;
 const float EPS = 0.001;
-const vec3 keylight = vec3(0, 5, 0);
-const vec3 backlight = vec3(0, 3, -5);
-const vec3 filllight = vec3(5, -5, 0);
+const float DISCRETIZE_NUM = 4.0;
+
+const float SPHERE_RADIUS = 1.5;
+const float TERRAIN_FREQ = 2.0;
+
+const vec3 SKYCOLOR = vec3(0.47, 0.66, 0.82);
+
+const vec3 keylight = vec3(5, 5, 0);
+const vec3 backlight = vec3(0, 5, -5);
+const vec3 filllight = vec3(0, -5, 0);
 
 in vec2 fs_Pos;
 in vec4 fs_LightVec;  
@@ -110,7 +117,7 @@ float fbm(in vec2 pos)
     for (int i = 0; i < 6; i++)
     {
         float frequency = pow(2.0f, float(i));
-        float amplitude = pow(0.5f, float(i));
+        float amplitude = pow(0.4f, float(i));
         
         amplitudeSum += amplitude;
 
@@ -139,20 +146,24 @@ float sdSphere( vec3 p, float s )
 
 float sdHeight( in vec3 p )
 {
-  float h = fbm(0.5*p.xz);
-  h = map(h, 0.0, 1.0, -1.0, 1.0);
+  float h = fbm(TERRAIN_FREQ*p.xz);
+  h = map(h, 0.0, 1.0, -0.8*SPHERE_RADIUS, 0.5*SPHERE_RADIUS);
   return p.y - h;
 }
 
-vec3 shadeLambert( vec3 pos, vec3 normal, vec3 diffuse )
+float discr( float x )
+{
+  float w = 1.0/DISCRETIZE_NUM;
+  return floor(x/w)*w;
+}
+
+vec3 shadeToon( vec3 pos, vec3 normal, vec3 diffuse )
 {
   vec3 n = normalize(normal);
   // Calculate the diffuse term for Lambert shading
-  float d1 = dot(n, normalize(keylight - pos));
-  float d2 = dot(n, normalize(filllight - pos));
-  float d3 = dot(n, normalize(backlight - pos));
-  // Avoid negative lighting values
-  // diffuseTerm = clamp(diffuseTerm, 0, 1);
+  float d1 = discr(clamp(dot(n, normalize(keylight - pos)), 0.0, 1.0));
+  float d2 = discr(clamp(dot(n, normalize(filllight - pos)), 0.0, 1.0));
+  float d3 = discr(clamp(dot(n, normalize(backlight - pos)), 0.0, 1.0));
 
   float ambientTerm = 0.2;
 
@@ -161,16 +172,36 @@ vec3 shadeLambert( vec3 pos, vec3 normal, vec3 diffuse )
   return diffuse * lightIntensity;
 }
 
+vec3 shadeLambert( vec3 pos, vec3 normal, vec3 diffuse )
+{
+  vec3 n = normalize(normal);
+  // Calculate the diffuse term for Lambert shading
+  float d1 = clamp(dot(n, normalize(keylight - pos)), 0.0, 1.0);
+  float d2 = clamp(dot(n, normalize(filllight - pos)), 0.0, 1.0);
+  float d3 = clamp(dot(n, normalize(backlight - pos)), 0.0, 1.0);
+
+  float ambientTerm = 0.2;
+
+  float lightIntensity = d1 + d2 + d3 + ambientTerm;
+
+  return diffuse * lightIntensity;
+}
+
+vec3 skyColor( vec2 uv )
+{
+  float t = map(uv.y, -1.0, 1.0, 0.0, 1.0);
+  return mix(vec3(0.0), SKYCOLOR, t);
+}
+
 vec3 heightColor( float h )
 {
   vec3 color = vec3(0.0);
-  if (h < -0.5)
-    color = vec3(0.46, 0.38, 0.33);
-  else if (h > -0.5 && h < 0.5)
+  if (h > 0.1)
+    color = vec3(0.94, 0.95, 0.93);
+  else if (h > -0.5)
     color = vec3(0.44, 0.47, 0.27);
   else
-    color = vec3(0.94, 0.95, 0.93);
-
+    color = vec3(0.46, 0.38, 0.33);
   return color;
 }
 
@@ -178,11 +209,12 @@ bool hitBSphere( inout vec3 p, in vec3 dir)
 {
   for (int i = 0; i < 50; i++)
   {
-    float d = sdSphere(p, 1.5);
+    float d = sdSphere(p, SPHERE_RADIUS);
     if (d < EPS)
       return true;
     p += dir * d;
   }
+  return false;
 }
 
 bool hitTerrain( inout vec3 p, in vec3 dir, inout vec3 color )
@@ -201,14 +233,14 @@ bool hitTerrain( inout vec3 p, in vec3 dir, inout vec3 color )
                         sdHeight(p - dz) - sdHeight(p + dz));
           n = normalize(n);
 
-          color += shadeLambert(p, n, heightColor(p.y));
+          color += shadeToon(p, n, heightColor(p.y));
           return true;
       }
 
       // Checks if the ray hits the bounding box from the inside
       if (sdBBox(p) >= EPS)
       {
-          color += vec3(0.47, 0.66, 0.82);
+          color += SKYCOLOR;
           return false;
       }
 
@@ -240,16 +272,19 @@ void main() {
   float d = 0.0;
 
   vec3 col = vec3(0.0);
-
   if (hitBSphere(pos, dir))
   {
     if(sdHeight(pos) < EPS)
       col = shadeLambert(pos, normalize(pos), heightColor(pos.y));
     else
     {
-      dir = refract(dir, normalize(pos), 1.0/1.3);
+      dir = refract(dir, normalize(pos), 1.0/1.2);
       hitTerrain(pos, dir, col);
     }
+  }
+  else 
+  {
+    col = skyColor(vec2(u, v));
   }
 
   // do {
