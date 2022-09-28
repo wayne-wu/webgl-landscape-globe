@@ -5,6 +5,8 @@ uniform vec3 u_Eye, u_Ref, u_Up;
 uniform vec2 u_Dimensions;
 uniform float u_Time;
 
+uniform mat4 u_ViewProj;
+
 const float STEPSIZE = 0.01;
 const int MAXSTEPS = 1000;
 const float EPS = 0.001;
@@ -233,6 +235,9 @@ bool hitTerrain( inout vec3 p, in vec3 dir, inout vec3 color )
                         sdHeight(p - dz) - sdHeight(p + dz));
           n = normalize(n);
 
+          // if (abs(dot(dir, n))<0.1)
+          //   color = vec3(0.0);
+          // else
           color += shadeToon(p, n, heightColor(p.y));
           return true;
       }
@@ -240,7 +245,11 @@ bool hitTerrain( inout vec3 p, in vec3 dir, inout vec3 color )
       // Checks if the ray hits the bounding box from the inside
       if (sdBBox(p) >= EPS)
       {
-          color += SKYCOLOR;
+          dir = refract(dir, normalize(p), 1.0/1.2);
+          p += dir*0.5;
+          vec4 uv = u_ViewProj*vec4(p, 1.0);
+
+          color += skyColor(vec2(uv.x, uv.y));
           return false;
       }
 

@@ -80,7 +80,7 @@ function main() {
   function tick() {
     camera.update();
     // stats.begin();
-
+    
     gl.viewport(0, 0, window.innerWidth, window.innerHeight);
     renderer.clear();
     processKeyPresses();
