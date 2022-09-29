@@ -17,9 +17,12 @@ const float TERRAIN_FREQ = 2.0;
 
 const vec3 SKYCOLOR = vec3(0.47, 0.66, 0.82);
 
-const vec3 keylight = vec3(5, 5, 0);
-const vec3 backlight = vec3(0, 5, -5);
-const vec3 filllight = vec3(0, -5, 0);
+const vec3 KEYLIGHT_POS = vec3(15, 15, 10);
+const vec3 KEYLIGHT = vec3(1.0, 1.0, 0.9) * 1.5;
+const vec3 FILLLIGHT_POS = vec3(0, -5, 0);
+const vec3 FILLLIGHT = vec3(1.0, 1.0, 0.9) * 1.0;
+const vec3 BACKLIGHT_POS = vec3(0, 5, -5);
+const vec3 BACKLIGHT = vec3(1.0, 1.0, 0.9) * 1.0;
 
 in vec2 fs_Pos;
 in vec4 fs_LightVec;  
@@ -159,34 +162,51 @@ float discr( float x )
   return floor(x/w)*w;
 }
 
-vec3 shadeToon( vec3 pos, vec3 normal, vec3 diffuse )
+float shadowP (in vec3 pos, in vec3 dir)
 {
-  vec3 n = normalize(normal);
-  // Calculate the diffuse term for Lambert shading
-  float d1 = discr(clamp(dot(n, normalize(keylight - pos)), 0.0, 1.0));
-  float d2 = discr(clamp(dot(n, normalize(filllight - pos)), 0.0, 1.0));
-  float d3 = discr(clamp(dot(n, normalize(backlight - pos)), 0.0, 1.0));
-
-  float ambientTerm = 0.2;
-
-  float lightIntensity = d1 + d2 + d3 + ambientTerm;
-
-  return diffuse * lightIntensity;
+  pos += dir * 0.1;
+  for (int i = 0; i < 50; ++i)
+  {
+    float d = sdHeight( pos );
+    if (d < EPS)
+      return 0.0;
+    pos += dir * d;
+  }
+  return 1.0;
 }
 
-vec3 shadeLambert( vec3 pos, vec3 normal, vec3 diffuse )
+vec3 shadeToon( vec3 pos, vec3 normal, vec3 albedo )
 {
   vec3 n = normalize(normal);
   // Calculate the diffuse term for Lambert shading
-  float d1 = clamp(dot(n, normalize(keylight - pos)), 0.0, 1.0);
-  float d2 = clamp(dot(n, normalize(filllight - pos)), 0.0, 1.0);
-  float d3 = clamp(dot(n, normalize(backlight - pos)), 0.0, 1.0);
+  float d1 = discr(clamp(dot(n, normalize(KEYLIGHT_POS - pos)), 0.0, 1.0));
+  float d2 = discr(clamp(dot(n, normalize(FILLLIGHT_POS - pos)), 0.0, 1.0));
+  float d3 = discr(clamp(dot(n, normalize(BACKLIGHT_POS - pos)), 0.0, 1.0));
 
   float ambientTerm = 0.2;
 
   float lightIntensity = d1 + d2 + d3 + ambientTerm;
 
-  return diffuse * lightIntensity;
+  return albedo * lightIntensity;
+}
+
+vec3 shadeLambert( vec3 pos, vec3 normal, vec3 albedo )
+{
+  vec3 n = normalize(normal);
+  // Calculate the diffuse term for Lambert shading
+
+  vec3 col = albedo * 
+            KEYLIGHT * 
+            max(0.0, dot(n, normalize(KEYLIGHT_POS - pos)));
+            // shadowP(pos, normalize(KEYLIGHT_POS - pos));
+  col += albedo * FILLLIGHT * clamp(dot(n, normalize(FILLLIGHT_POS - pos)), 0.0, 1.0);
+  col += albedo * BACKLIGHT * clamp(dot(n, normalize(BACKLIGHT_POS - pos)), 0.0, 1.0);
+
+  // float ambientTerm = 0.2;
+
+  // float lightIntensity = d1 + d2 + d3 + ambientTerm;
+
+  return col;
 }
 
 vec3 skyColor( vec2 uv )
@@ -238,7 +258,7 @@ bool hitTerrain( inout vec3 p, in vec3 dir, inout vec3 color )
           // if (abs(dot(dir, n))<0.1)
           //   color = vec3(0.0);
           // else
-          color += shadeToon(p, n, heightColor(p.y));
+          color += shadeLambert(p, n, heightColor(p.y));
           return true;
       }
 
