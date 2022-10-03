@@ -7,8 +7,8 @@ uniform float u_Time;
 
 uniform mat4 u_ViewProj;
 
-const float STEPSIZE = 0.01;
-const int MAXSTEPS = 1000;
+const float STEPSIZE = 0.1;
+const int MAXSTEPS = 100;
 const float EPS = 0.001;
 const float DISCRETIZE_NUM = 4.0;
 
@@ -17,6 +17,7 @@ const float TERRAIN_FREQ = 2.0;
 const float TERRAIN_AMP = 0.6;
 
 const vec3 SKYCOLOR = vec3(0.47, 0.66, 0.82);
+const vec3 CLOUDCOLOR = vec3(0.1);
 
 const vec3 KEYLIGHT_POS = vec3(15, 15, 10);
 const vec3 KEYLIGHT = vec3(1.0, 1.0, 0.9) * 1.5;
@@ -59,19 +60,17 @@ float map(float value, float min1, float max1, float min2, float max2) {
 }
 
 // Hash functions are taken from IQ's shadertoy examples
-float hash (in vec2 st) {
+float hash2(in vec2 st) {
     return fract(sin(dot(st.xy,
                   vec2(12.9898,78.233)))
                  * 43758.5453123);
 }
 
-vec3 hash3( vec3 p )
+float hash3(vec3 p)
 {
-	p = vec3( dot(p,vec3(127.1,311.7, 74.7)),
-			  dot(p,vec3(269.5,183.3,246.1)),
-			  dot(p,vec3(113.5,271.9,124.6)));
-
-	return -1.0 + 2.0*fract(sin(p)*43758.5453123);
+    p  = fract( p*0.3183099+.1 );
+	p *= 17.0;
+    return fract( p.x*p.y*p.z*(p.x+p.y+p.z) );
 }
 
 float trilinear(float a, float b, float c, float d, 
@@ -86,12 +85,22 @@ float bilinear(float a, float b, float c, float d, vec2 u)
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-vec2 cubic(vec2 t)
+vec2 cubic2(vec2 t)
 {
     return t*t*(3.0-2.0*t);
 }
 
-vec2 quintic(vec2 t)
+vec3 cubic3(vec3 t)
+{
+    return t*t*(3.0-2.0*t);
+}
+
+vec2 quintic2(vec2 t)
+{
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+
+vec3 quintic3(vec3 t)
 {
     return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
@@ -101,21 +110,40 @@ vec2 quintic(vec2 t)
 //     return dot(hash3(i + inc), f - inc);
 // }
 
-float noise( in vec2 x )
+float noise3( in vec3 x )
+{
+    vec3 i = floor(x);
+    vec3 u = fract(x);
+    u = cubic3(u);
+	
+    float a = hash3(i+vec3(0,0,0));
+    float b = hash3(i+vec3(1,0,0));
+    float c = hash3(i+vec3(0,1,0));
+    float d = hash3(i+vec3(1,1,0));
+    float e = hash3(i+vec3(0,0,1));
+    float f = hash3(i+vec3(1,0,1));
+    float g = hash3(i+vec3(0,1,1));
+    float h = hash3(i+vec3(1,1,1));
+
+    // Trilinear Interpolation
+    return trilinear(a, b, c, d, e, f, g, h, u);
+}
+
+float noise2( in vec2 x )
 {
     vec2 i = floor(x);
     vec2 u = fract(x);
-    u = quintic(u);
+    u = cubic2(u);
 
-    float a = hash(i + vec2(0,0));
-    float b = hash(i + vec2(1,0));
-    float c = hash(i + vec2(0,1));
-    float d = hash(i + vec2(1,1));
+    float a = hash2(i + vec2(0,0));
+    float b = hash2(i + vec2(1,0));
+    float c = hash2(i + vec2(0,1));
+    float d = hash2(i + vec2(1,1));
 
     return bilinear(a, b, c, d, u);
 }
 
-float fbm(in vec2 pos)
+float fbm3(in vec3 pos)
 {
     float total = 0.f;
     float amplitudeSum = 0.f;
@@ -127,17 +155,40 @@ float fbm(in vec2 pos)
         
         amplitudeSum += amplitude;
 
-        total += amplitude*noise(frequency*pos*1.0);
+        total += amplitude*noise3(frequency*pos*1.0);
     }
 
     return total/amplitudeSum;
 }
 
+float fbm2(in vec2 pos)
+{
+    float total = 0.f;
+    float amplitudeSum = 0.f;
+
+    for (int i = 0; i < 10; i++)
+    {
+        float frequency = pow(2.0f, float(i));
+        float amplitude = pow(0.4f, float(i));
+        
+        amplitudeSum += amplitude;
+
+        total += amplitude*noise2(frequency*pos*1.0);
+    }
+
+    return total/amplitudeSum;
+}
 
 float sdBox(vec3 p, vec3 b)
 {
     vec3 d = abs(p) - b;
     return min(max(d.x, max(d.y, d.z)), 0.0) + length(max(d, 0.0));
+}
+
+float sdRoundBox( vec3 p, vec3 b, float r )
+{
+  vec3 q = abs(p) - b;
+  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0) - r;
 }
 
 float sdBBox(vec3 p)
@@ -150,9 +201,15 @@ float sdSphere( vec3 p, float s )
   return length(p)-s;
 }
 
+float sdCloud( vec3 p )
+{
+  return -sdBox(p - vec3(0.0, 0.4, 0.0), vec3(2.0, 0.2, 2.0)) 
+          + 1.0*map(fbm3(3.0*p), 0.0, 1.0, -1.0, 1.0);
+}
+
 float sdHeight( in vec3 p )
 {
-  float h = TERRAIN_AMP*fbm(TERRAIN_FREQ*p.xz);
+  float h = TERRAIN_AMP*fbm2(TERRAIN_FREQ*p.xz);
   h = map(h, 0.0, 1.0, -0.8*SPHERE_RADIUS, 0.5*SPHERE_RADIUS);
   return p.y - h;
 }
@@ -186,13 +243,6 @@ vec3 shadeToon( vec3 pos, vec3 normal, vec3 albedo )
             discr(max(0.0, dot(n, normalize(KEYLIGHT_POS - pos)))) *
             shadowP(pos, normalize(KEYLIGHT_POS - pos));
   col += albedo * FILLLIGHT * discr(max(0.0, dot(n, normalize(FILLLIGHT_POS - pos))));
-  // float d1 = discr(clamp(dot(n, normalize(KEYLIGHT_POS - pos)), 0.0, 1.0));
-  // float d2 = discr(clamp(dot(n, normalize(FILLLIGHT_POS - pos)), 0.0, 1.0));
-  // float d3 = discr(clamp(dot(n, normalize(BACKLIGHT_POS - pos)), 0.0, 1.0));
-
-  // float ambientTerm = 0.2;
-
-  // float lightIntensity = d1 + d2 + d3 + ambientTerm;
 
   return col;
 }
@@ -206,13 +256,8 @@ vec3 shadeLambert( vec3 pos, vec3 normal, vec3 albedo )
             KEYLIGHT * 
             max(0.0, dot(n, normalize(KEYLIGHT_POS - pos))) *
             shadowP(pos, normalize(KEYLIGHT_POS - pos));
-            // shadowP(pos, normalize(KEYLIGHT_POS - pos));
   col += albedo * FILLLIGHT * clamp(dot(n, normalize(FILLLIGHT_POS - pos)), 0.0, 1.0);
   col += albedo * BACKLIGHT * clamp(dot(n, normalize(BACKLIGHT_POS - pos)), 0.0, 1.0);
-
-  // float ambientTerm = 0.2;
-
-  // float lightIntensity = d1 + d2 + d3 + ambientTerm;
 
   return col;
 }
@@ -239,20 +284,29 @@ vec3 getTerrainNormal( vec3 p )
 {
   vec3 dx = vec3(EPS, 0, 0);
   vec3 dz = vec3(0, 0, EPS);
-  return normalize(vec3(sdHeight(p - dx) - sdHeight(p - dx), 
-                    2.0*EPS,
-                    sdHeight(p - dz) - sdHeight(p + dz)));
+  return normalize(vec3(sdHeight(p + dx) - sdHeight(p - dx), 
+                      2.0*EPS,
+                      sdHeight(p + dz) - sdHeight(p - dz)));
 }
 
-vec3 getTerrainShading( vec3 p, vec3 n )
+vec3 getTerrainShading( vec3 pos, vec3 n )
 {
-  return vec3(0.0);
+  // n = normalize(n);
+  // Calculate the diffuse term for Lambert shading
+
+  vec3 col = KEYLIGHT * 
+             max(0.0, dot(n, normalize(KEYLIGHT_POS - pos))) *
+             shadowP(pos, normalize(KEYLIGHT_POS - pos));
+            // shadowP(pos, normalize(KEYLIGHT_POS - pos));
+  col += FILLLIGHT * max(0.0, dot(n, normalize(FILLLIGHT_POS - pos)));
+  col += BACKLIGHT * max(0.0, dot(n, normalize(BACKLIGHT_POS - pos)));
+  return col;
 }
 
 vec3 getTerrainMaterial( vec3 p, vec3 n )
 {
   vec3 col = vec3(0.41, 0.25, 0.20);  // ground
-  col = mix(col, /* grass */ vec3(0.51,0.58,0.38), smoothstep(0.5, 0.6, n.y));
+  col = mix(col, /* grass */ vec3(0.51,0.58,0.38), smoothstep(0.2, 0.8, n.y));
   // if (p.y > 0.0 && noise(p.xz) > 0.5)
   //   color = vec3(0.94, 0.95, 0.93);
   // else if (p.y > -0.5 && noise(10.0*p.xz) > 0.5)
@@ -262,6 +316,51 @@ vec3 getTerrainMaterial( vec3 p, vec3 n )
   // return color;
 
   return col;
+}
+
+vec3 applyFog( vec3 col, float d )
+{
+  return mix(vec3(0.80), col, exp(-0.2*d));
+}
+
+vec3 getCloudNormal(vec3 p)
+{
+  vec3 dx = vec3(EPS, 0, 0);
+  vec3 dy = vec3(0, EPS, 0);
+  vec3 dz = vec3(0, 0, EPS);
+  return normalize(vec3(
+                    sdCloud(p + dx) - sdCloud(p - dx), 
+                    sdCloud(p + dy) - sdCloud(p - dy),
+                    sdCloud(p + dz) - sdCloud(p - dz)));
+}
+
+vec3 getCloudShading( vec3 pos, vec3 n )
+{
+  // Calculate the diffuse term for Lambert shading
+  vec3 col = KEYLIGHT * 
+             max(0.0, dot(n, normalize(KEYLIGHT_POS - pos))) *
+             shadowP(pos, normalize(KEYLIGHT_POS - pos));
+            // shadowP(pos, normalize(KEYLIGHT_POS - pos));
+  col += FILLLIGHT * max(0.0, dot(n, normalize(FILLLIGHT_POS - pos)));
+  col += BACKLIGHT * max(0.0, dot(n, normalize(BACKLIGHT_POS - pos)));
+  return col;
+}
+
+bool hitCloud( vec3  p, in vec3 dir, inout vec3 color)
+{
+  for (int i = 0; i < 300; ++i)
+  {
+    float density = sdCloud(p);
+    if(density > 0.0)
+    {
+      vec3 n = getCloudNormal(p);
+      color += getTerrainShading(p, n) * vec3(0.2);
+      return true;
+    }
+    p += dir * STEPSIZE;
+  }
+
+  return false;
 }
 
 bool hitBSphere( inout vec3 p, in vec3 dir)
@@ -278,7 +377,6 @@ bool hitBSphere( inout vec3 p, in vec3 dir)
 
 bool hitTerrain( inout vec3 p, in vec3 dir, inout vec3 color )
 {
-
   float dt = STEPSIZE;
   float lh = 0.0;
   float ly = 0.0;
@@ -286,7 +384,23 @@ bool hitTerrain( inout vec3 p, in vec3 dir, inout vec3 color )
   {
       // When we hit very close to the surface
       float d = sdHeight(p);
-      if (d < EPS)
+      float cloudDensity = sdCloud(p);
+      cloudDensity = smoothstep(0.12, 0.35, cloudDensity);
+
+      float a = 0.0;
+      if (cloudDensity > 0.0)
+      {
+        vec3 n = getCloudNormal(p);
+        vec3 col = getCloudShading(p, n) * CLOUDCOLOR;
+
+        color += (1.0 - a) * cloudDensity * col;
+        a += (1.0 - a) * cloudDensity * 0.3;
+
+        if (a > 0.95)
+          return true;
+      }
+
+      else if (d < EPS)
       {
           p -= dir * dt; // step back one
           p += dir * dt*(lh-ly)/(-ly+d+lh); // step to interpolated point
@@ -294,21 +408,14 @@ bool hitTerrain( inout vec3 p, in vec3 dir, inout vec3 color )
           // Calculate normal
           vec3 n = getTerrainNormal(p);
 
-          // if (abs(dot(dir, n))<0.1)
-          //   color = vec3(0.0);
-          // else
-          color += shadeLambert(p, n, getTerrainMaterial(p, n));
+          color += getTerrainShading(p, n) * getTerrainMaterial(p, n);
 
-          // Add fog
-          color = mix(vec3(0.86), color, exp(-0.08*(float(i)*dt)));
+          color = applyFog(color, float(i)*dt);
+
           return true;
       }
-
-      lh = p.y - d;
-      ly = p.y;
-
       // Checks if the ray hits the bounding box from the inside
-      if (sdBBox(p) >= EPS)
+      else if (sdBBox(p) > 0.0)
       {
           dir = refract(dir, normalize(p), 1.0/1.2);
           p += dir*0.5;
@@ -318,7 +425,10 @@ bool hitTerrain( inout vec3 p, in vec3 dir, inout vec3 color )
           return false;
       }
 
-      // dt = float(i)*STEPSIZE;
+      lh = p.y - d;
+      ly = p.y;
+
+      dt = STEPSIZE + 0.0001*float(i);
       p += dir * dt;
   }
   return true;
@@ -346,7 +456,7 @@ void main() {
   int itr = 0;
   float d = 0.0;
 
-  vec3 col = vec3(0.0);
+  vec3 col = vec3(0.);
   if (hitBSphere(pos, dir))
   {
     if(sdHeight(pos) < EPS)
@@ -362,23 +472,5 @@ void main() {
     col = skyColor(vec2(u, v));
   }
 
-  // do {
-  //   d = sdSphere(pos, 1.0);
-  //   if (d < EPS)
-  //   {
-  //     col = shadeLambert(pos, pos, vec3(1.0));
-  //     break;
-  //   }
-  //   pos += d*dir;
-  //   ++itr;
-  // } while(itr < MAXSTEPS);
-
-  // vec4 surfaceColor = vec4(0.0);
-  // vec4 boxColor = vec4(0.0);
-  // vec4 background = vec4(0.9);
-  // vec4 wallColor = background;
-
-  // vec3 p = eye;
   out_Col = vec4(col, 1.0);
-  // out_Col = vec4(0.5 * (fs_Pos + vec2(1.0)), 0.5 * (sin(u_Time * 3.14159 * 0.01) + 1.0), 1.0);
 }
