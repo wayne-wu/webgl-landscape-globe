@@ -1,4 +1,4 @@
-# Project 2: SDFs
+# Terrain Globe
 
 ## Overview
 
