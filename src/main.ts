@@ -1,6 +1,6 @@
 import {vec2, vec3} from 'gl-matrix';
 const Stats = require('stats-js');
-// import * as DAT from 'dat-gui';
+import * as DAT from 'dat-gui';
 import Square from './geometry/Square';
 import OpenGLRenderer from './rendering/gl/OpenGLRenderer';
 import Camera from './Camera';
@@ -45,8 +45,15 @@ function main() {
   stats.domElement.style.top = '0px';
   document.body.appendChild(stats.domElement);
 
+  const guiParams = {
+    Pause : false, 
+  }
+
   // Add controls to the gui
-  // const gui = new DAT.GUI();
+  const gui = new DAT.GUI();
+  const folder = gui.addFolder('Controls');
+  folder.add(guiParams, 'Pause');
+  folder.open();
 
   // get canvas and webgl context
   const canvas = <HTMLCanvasElement> document.getElementById('canvas');
@@ -93,7 +100,8 @@ function main() {
     renderer.render(camera, flat, [
       square,
     ], time);
-    time++;
+
+    if(!guiParams.Pause) time++;
     stats.end();
 
     // Tell the browser to call `tick` again whenever it renders a new frame
