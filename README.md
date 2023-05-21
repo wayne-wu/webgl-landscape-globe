@@ -1,8 +1,8 @@
-# Terrain Globe
+# The Globe of Landscape
 
 ## Overview
 
-[Live Demo](https://www.wuwayne.com/hw02-landscape)
+[Live Demo](https://www.wuwayne.com/globe-of-landscape)
 
 ![Teaser](img/teaser.png)
 
