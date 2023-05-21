@@ -22,7 +22,7 @@ const float TERRAIN_AMP = 0.6;
 const vec3 SKYCOLOR = vec3(0.47, 0.66, 0.82);
 const vec3 CLOUDCOLOR = vec3(1.0);
 const float CLOUD_HEIGHT = 0.4;
-const float CLOUD_THICKNESS = 0.3;
+const float CLOUD_THICKNESS = 0.35;
 const float CLOUD_SPEED = 0.005;
 
 const vec3 KEYLIGHT_POS = vec3(15, 15, 10);
@@ -380,24 +380,25 @@ vec3 hitTerrain( inout vec3 p, in vec3 dir)
   {
 
       float cloudDensity = sdCloud(p);
-      cloudDensity = smoothstep(0.3, 0.4, cloudDensity);
+      cloudDensity = smoothstep(0.3, 0.6, cloudDensity);
 
       if (cloudDensity > 0.0)
       {
-        // TODO: Figure out a better way to compute gradient
-        vec3 grad = normalize(vec3(0.0, 1.0, 0.0)+2.0*fbm3(p, 4));
+        vec3 grad = -gradCloud(p);
+        
         vec3 s = normalize(KEYLIGHT_POS - p);
         vec3 s2 = normalize(FILLLIGHT_POS - p);
         vec3 s3 = normalize(BACKLIGHT_POS - p);
 
+        // TODO: Add cloud self shadowing
         // float ld = sdCloud(p + 5.0*STEPSIZE*s);
         // float shadow = 1.0 - smoothstep(-1.0, 1.0, ld);
         // shadow *= 1.5;
 
         vec3 col = vec3(0.0);
-        col += 0.5*clamp(0.3+0.7*dot(grad, s),  0.0, 1.0);
-        col += 0.3*clamp(0.3+0.7*dot(grad, s2), 0.0, 1.0);
-        col += 0.2*clamp(0.3+0.7*dot(grad, s3), 0.0, 1.0);
+        col += clamp(0.3+0.7*dot(grad, s),  0.0, 1.0)*KEYLIGHT;
+        col += clamp(0.3+0.7*dot(grad, s2), 0.0, 1.0)*FILLLIGHT;
+        col += clamp(0.3+0.7*dot(grad, s3), 0.0, 1.0)*BACKLIGHT;
 
 
         color += (1.0 - a) * cloudDensity * col;
