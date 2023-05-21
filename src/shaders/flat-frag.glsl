@@ -326,7 +326,8 @@ vec3 getTerrainShading( vec3 pos, vec3 n )
   vec3 s = normalize(KEYLIGHT_POS - pos);
 
   // TODO: Use line intersection to find q exactly
-  vec3 q = pos + s * (CLOUD_HEIGHT - pos.y) * 2.0;
+  float a = CLOUD_HEIGHT - pos.y;
+  vec3 q = pos + s * a * 0.75;
 
   vec3 col = KEYLIGHT * 
              max(0.0, dot(n, s)) *
@@ -465,14 +466,8 @@ void main() {
 
   vec3 col = vec3(0.);
   if (hitBSphere(pos, dir))
-  {
-    if(sdHeight(pos) < EPS)
-      col = shadeLambert(pos, normalize(pos), vec3(0.3));
-    else
-    {
-      dir = refract(dir, normalize(pos), 1.0/IOR);
-      col = hitTerrain(pos, dir);
-    }
+  { 
+    col = sdHeight(pos) < EPS ? shadeLambert(pos, normalize(pos), vec3(0.3)) : hitTerrain(pos, refract(dir, normalize(pos), 1.0/IOR));
   }
   else 
   {
