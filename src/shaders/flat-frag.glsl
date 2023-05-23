@@ -313,8 +313,8 @@ vec3 shadeLambert( vec3 pos, vec3 normal, vec3 albedo )
 
 vec3 skyColor( vec2 uv )
 {
-  float t = map(uv.x*uv.x + uv.y*uv.y, 0.0, 2.0, 0.0, 1.0);
-  return mix(SKYCOLOR, vec3(0.0), bias(0.75, t));
+  float t = 1.8*length(uv.xy*vec2(1.0, u_Dimensions.y/u_Dimensions.x));
+  return mix(SKYCOLOR, vec3(0.0), bias(0.4,t));
 }
 
 vec3 getTerrainNormal( const vec3 p )
