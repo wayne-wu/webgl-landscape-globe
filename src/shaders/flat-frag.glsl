@@ -7,6 +7,8 @@ uniform float u_Time;
 
 uniform mat4 u_ViewProj;
 
+uniform vec4 u_Cloud;
+
 #define STEPSIZE 0.01
 #define MIN_T 0.001
 #define MAX_T 5.0
@@ -22,7 +24,7 @@ const float TERRAIN_AMP = 0.6;
 const vec3 SKYCOLOR = vec3(0.47, 0.66, 0.82);
 const vec3 CLOUDCOLOR = vec3(1.0);
 const float CLOUD_HEIGHT = 0.4;
-const float CLOUD_THICKNESS = 0.35;
+const float CLOUD_THICKNESS = 0.2;
 const float CLOUD_SPEED = 0.005;
 
 const vec3 KEYLIGHT_POS = vec3(15, 15, 10);
@@ -229,7 +231,10 @@ float sdSphere( vec3 p, float s )
 float sdCloud( vec3 p, int octaves )
 {
   float d = abs(p.y - CLOUD_HEIGHT) - CLOUD_THICKNESS;
-  return -d + CLOUD_THICKNESS*fbm3((p + CLOUD_SPEED * u_Time * vec3(1.0, 0.0, 1.0))*3.0, octaves);
+  d = -d + CLOUD_THICKNESS*fbm3((p + CLOUD_SPEED * u_Time * vec3(1.0, 0.0, 1.0))*3.0, octaves);
+  // map density to 0 to 1
+  d = map(max(0.0, d), 0.0, CLOUD_THICKNESS, 0.0, 1.0);
+  return d;
 }
 
 float sdCloud( vec3 p )
@@ -308,8 +313,8 @@ vec3 shadeLambert( vec3 pos, vec3 normal, vec3 albedo )
 
 vec3 skyColor( vec2 uv )
 {
-  float t = map(sqrt(uv.x*uv.x + uv.y*uv.y), 0.0, 1.414, 0.0, 1.0);
-  return mix(SKYCOLOR, vec3(0.0), gain(0.8, t));
+  float t = map(uv.x*uv.x + uv.y*uv.y, 0.0, 2.0, 0.0, 1.0);
+  return mix(SKYCOLOR, vec3(0.0), bias(0.75, t));
 }
 
 vec3 getTerrainNormal( const vec3 p )
@@ -380,12 +385,12 @@ vec3 hitTerrain( inout vec3 p, in vec3 dir)
   for (; t < MAX_T; t += dt)
   {
 
-      float cloudDensity = sdCloud(p);
-      cloudDensity = smoothstep(0.3, 0.6, cloudDensity);
+      float cloudDensity = sdCloud(p) * u_Cloud.x;
+      cloudDensity = smoothstep(0.4, 0.9, cloudDensity);
 
-      if (cloudDensity > 0.0)
+      if (cloudDensity > 0.001)
       {
-        vec3 grad = -gradCloud(p);
+        vec3 grad = vec3(0.0, 1.0, 0.0);
         
         vec3 s = normalize(KEYLIGHT_POS - p);
         vec3 s2 = normalize(FILLLIGHT_POS - p);
@@ -401,9 +406,8 @@ vec3 hitTerrain( inout vec3 p, in vec3 dir)
         col += clamp(0.3+0.7*dot(grad, s2), 0.0, 1.0)*FILLLIGHT;
         col += clamp(0.3+0.7*dot(grad, s3), 0.0, 1.0)*BACKLIGHT;
 
-
         color += (1.0 - a) * cloudDensity * col;
-        a += (1.0 - a) * cloudDensity * 0.5;
+        a += (1.0 - a) * cloudDensity;
       }
     
       float d = sdHeight(p);
@@ -430,7 +434,7 @@ vec3 hitTerrain( inout vec3 p, in vec3 dir)
           dir = refract(dir, normalize(p), IOR/1.0);
           vec4 uv = u_ViewProj*vec4(p + dir*0.5, 1.0);
 
-          color += skyColor(vec2(uv.x, uv.y));
+          color += skyColor(uv.xy);
 
           break;
       }

@@ -31,6 +31,8 @@ class ShaderProgram {
   unifTime: WebGLUniformLocation;
   unifViewProj: WebGLUniformLocation;
 
+  unifCloud: WebGLUniformLocation;
+
   constructor(shaders: Array<Shader>) {
     this.prog = gl.createProgram();
 
@@ -49,6 +51,7 @@ class ShaderProgram {
     this.unifDimensions   = gl.getUniformLocation(this.prog, "u_Dimensions");
     this.unifTime   = gl.getUniformLocation(this.prog, "u_Time");
     this.unifViewProj = gl.getUniformLocation(this.prog, "u_ViewProj");
+    this.unifCloud = gl.getUniformLocation(this.prog, "u_Cloud");
   }
 
   use() {
@@ -89,6 +92,13 @@ class ShaderProgram {
     this.use();
     if (this.unifViewProj !== -1) {
       gl.uniformMatrix4fv(this.unifViewProj, false, vp);
+    }
+  }
+
+  setCloud(density: number) {
+    this.use();
+    if (this.unifCloud !== -1) {
+      gl.uniform4f(this.unifCloud, density, 0, 0, 0);
     }
   }
 

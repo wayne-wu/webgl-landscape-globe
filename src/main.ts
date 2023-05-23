@@ -46,14 +46,16 @@ function main() {
   document.body.appendChild(stats.domElement);
 
   const guiParams = {
-    Pause : false, 
+    Pause : false,
+    Density : 0.45,
   }
 
   // Add controls to the gui
   const gui = new DAT.GUI();
-  const folder = gui.addFolder('Controls');
-  folder.add(guiParams, 'Pause');
-  folder.open();
+  const cloudfolder = gui.addFolder('Cloud');
+  cloudfolder.add(guiParams, 'Pause');
+  cloudfolder.add(guiParams, 'Density', 0.0, 1.0).onFinishChange(updateCloud);
+  cloudfolder.open();
 
   // get canvas and webgl context
   const canvas = <HTMLCanvasElement> document.getElementById('canvas');
@@ -82,6 +84,12 @@ function main() {
   function processKeyPresses() {
     // Use this if you wish
   }
+
+  function updateCloud() {
+    flat.setCloud(guiParams.Density);
+  }
+
+  updateCloud();
 
   // This function will be called every frame
   function tick() {
