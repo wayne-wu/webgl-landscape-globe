@@ -2,7 +2,7 @@
 
 ## Overview
 
-[Live Demo](https://www.wuwayne.com/globe-of-landscape)
+[Live Demo](https://www.wuwayne.com/webgl-landscape-globe)
 
 ![Teaser](img/teaser.png)
 
